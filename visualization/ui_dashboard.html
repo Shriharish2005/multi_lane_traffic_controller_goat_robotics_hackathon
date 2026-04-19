@@ -1,0 +1,1321 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Multi-Robot Traffic Control — Live Dashboard</title>
+<link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Rajdhani:wght@400;600;700&family=Orbitron:wght@400;700;900&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg:      #060b14;
+  --panel:   #0b1520;
+  --border:  #1a3450;
+  --accent:  #00e5ff;
+  --accent2: #ff6d00;
+  --green:   #00e676;
+  --yellow:  #ffd600;
+  --red:     #ff1744;
+  --purple:  #d500f9;
+  --text:    #c8dff0;
+  --dim:     #4a6a8a;
+  --glow:    0 0 12px #00e5ff55;
+}
+*{box-sizing:border-box;margin:0;padding:0;}
+html,body{height:100%;overflow:hidden;}
+body{
+  background:var(--bg);color:var(--text);
+  font-family:'Rajdhani',sans-serif;font-size:14px;
+  display:flex;flex-direction:column;
+}
+body::before{
+  content:'';position:fixed;inset:0;pointer-events:none;z-index:9999;
+  background:repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(0,0,0,0.055) 2px,rgba(0,0,0,0.055) 4px);
+}
+
+/* ─── HEADER ─────────────────────────────── */
+header{
+  display:flex;align-items:center;justify-content:space-between;
+  padding:10px 22px;flex-shrink:0;
+  background:linear-gradient(90deg,#061020,#0b1520 55%,#060b14);
+  border-bottom:1px solid var(--border);
+}
+header h1{
+  font-family:'Orbitron',monospace;font-size:15px;font-weight:900;
+  color:var(--accent);letter-spacing:2px;
+  text-shadow:0 0 18px #00e5ff88,0 0 40px #00e5ff33;
+}
+.hdr-meta{
+  font-family:'Share Tech Mono',monospace;font-size:11px;color:var(--dim);
+  display:flex;gap:20px;align-items:center;
+}
+.live-dot{
+  width:7px;height:7px;border-radius:50%;background:var(--green);
+  display:inline-block;box-shadow:0 0 8px var(--green);
+  animation:blink 1.4s infinite;margin-right:3px;
+}
+@keyframes blink{0%,100%{opacity:1;}50%{opacity:.25;}}
+
+/* ─── CONTROLS BAR ───────────────────────── */
+.controls{
+  display:flex;gap:8px;align-items:center;flex-shrink:0;
+  padding:7px 22px;background:var(--panel);
+  border-bottom:1px solid var(--border);flex-wrap:wrap;
+}
+button{
+  font-family:'Orbitron',monospace;font-size:10px;font-weight:700;
+  letter-spacing:.8px;padding:5px 13px;
+  border:1px solid var(--accent);background:transparent;
+  color:var(--accent);cursor:pointer;transition:all .18s;text-transform:uppercase;
+}
+button:hover{background:#00e5ff1a;box-shadow:var(--glow);}
+button.primary{background:var(--accent);color:#000;}
+button.primary:hover{background:#00f0ff;}
+button.danger{border-color:var(--red);color:var(--red);}
+button.danger:hover{background:#ff174418;}
+button.warn{border-color:var(--yellow);color:var(--yellow);}
+button.warn:hover{background:#ffd60018;}
+label{font-size:11px;color:var(--dim);font-weight:600;letter-spacing:.7px;}
+input[type=range]{accent-color:var(--accent);width:80px;vertical-align:middle;}
+select{
+  background:var(--panel);color:var(--text);
+  border:1px solid var(--border);padding:4px 8px;
+  font-family:'Share Tech Mono',monospace;font-size:11px;
+}
+.pill{
+  font-family:'Share Tech Mono',monospace;font-size:10px;
+  border:1px solid var(--border);padding:3px 9px;background:#00e5ff08;
+  color:var(--accent);white-space:nowrap;
+}
+.pill.red  {color:var(--red);   border-color:#ff174440;background:#ff174408;}
+.pill.green{color:var(--green); border-color:#00e67640;background:#00e67608;}
+.pill.ylw  {color:var(--yellow);border-color:#ffd60040;background:#ffd60008;}
+
+/* ─── MAIN AREA ──────────────────────────── */
+.main{display:flex;flex:1;min-height:0;}
+
+/* ─── MAP CANVAS ─────────────────────────── */
+.map-wrap{
+  position:relative;flex:1;background:var(--bg);
+  border-right:1px solid var(--border);overflow:hidden;
+}
+#warehouseCanvas{display:block;width:100%;height:100%;}
+
+/* progress bar across top of map */
+.timebar{position:absolute;top:0;left:0;right:0;height:3px;background:var(--border);z-index:5;}
+.timebar-fill{height:100%;background:linear-gradient(90deg,var(--accent),var(--purple));transition:width .15s linear;}
+
+/* ─── SIDEBAR ────────────────────────────── */
+.sidebar{
+  width:330px;flex-shrink:0;display:flex;flex-direction:column;
+  background:var(--panel);overflow:hidden;
+}
+.sec-title{
+  font-family:'Orbitron',monospace;font-size:9px;font-weight:700;
+  letter-spacing:2px;color:var(--dim);text-transform:uppercase;
+  padding:8px 14px 5px;border-bottom:1px solid var(--border);
+  background:var(--bg);position:sticky;top:0;z-index:10;
+}
+
+/* robot list */
+.robot-list{flex:1;overflow-y:auto;min-height:0;}
+.robot-list::-webkit-scrollbar{width:3px;}
+.robot-list::-webkit-scrollbar-thumb{background:var(--border);}
+
+.rcard{
+  padding:9px 14px;border-bottom:1px solid #0d1f30;
+  cursor:pointer;transition:background .15s;
+}
+.rcard:hover{background:#0d2035;}
+.rcard.selected{background:#0d2638;border-left:3px solid var(--accent);}
+.rcard.arrived{opacity:.5;}
+
+.rcard-hdr{display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;}
+.rname{font-family:'Orbitron',monospace;font-size:12px;font-weight:700;color:#fff;}
+.rstate{
+  font-family:'Share Tech Mono',monospace;font-size:9px;
+  padding:2px 6px;border-radius:2px;text-transform:uppercase;letter-spacing:.8px;
+}
+.s-MOVING        {background:#00e67618;color:var(--green); border:1px solid #00e67638;}
+.s-WAITING       {background:#ffd60018;color:var(--yellow);border:1px solid #ffd60038;}
+.s-ARRIVED       {background:#00e5ff18;color:var(--accent);border:1px solid #00e5ff38;}
+.s-PLANNING      {background:#d500f918;color:var(--purple);border:1px solid #d500f938;}
+.s-EMERGENCY_STOP{background:#ff174418;color:var(--red);   border:1px solid #ff174438;}
+.s-IDLE          {background:#4a6a8a18;color:var(--dim);   border:1px solid #4a6a8a38;}
+
+.rroute{font-family:'Share Tech Mono',monospace;font-size:10px;color:var(--dim);margin-bottom:5px;}
+.rroute span{color:var(--text);}
+
+.brow{display:flex;align-items:center;gap:7px;margin-bottom:3px;}
+.blabel{font-family:'Share Tech Mono',monospace;font-size:9px;color:var(--dim);width:42px;flex-shrink:0;}
+.btrack{flex:1;height:4px;background:#1a3450;border-radius:2px;overflow:hidden;}
+.bfill{height:100%;border-radius:2px;transition:width .25s ease;}
+.bp{background:linear-gradient(90deg,var(--accent),#0080ff);}
+.bw{background:linear-gradient(90deg,var(--yellow),var(--accent2));}
+.bs{background:linear-gradient(90deg,var(--green),#00ff9f);}
+.bval{font-family:'Share Tech Mono',monospace;font-size:9px;color:var(--dim);width:28px;text-align:right;flex-shrink:0;}
+
+.rstats{display:flex;gap:8px;flex-wrap:wrap;margin-top:3px;}
+.ms{font-family:'Share Tech Mono',monospace;font-size:9px;color:var(--dim);}
+.ms span{color:var(--text);font-weight:600;}
+
+/* safety badge on card */
+.safety-ok  {font-family:'Share Tech Mono',monospace;font-size:8px;color:var(--green);}
+.safety-warn{font-family:'Share Tech Mono',monospace;font-size:8px;color:var(--yellow);}
+.safety-stop{font-family:'Share Tech Mono',monospace;font-size:8px;color:var(--red);}
+
+/* ─── METRICS PANEL ──────────────────────── */
+.metrics-panel{border-top:1px solid var(--border);background:var(--bg);padding:10px 14px;flex-shrink:0;}
+.mgrid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-top:6px;}
+.mitem{background:#0b1520;border:1px solid var(--border);padding:6px 8px;}
+.mlabel{font-family:'Share Tech Mono',monospace;font-size:8px;color:var(--dim);letter-spacing:.8px;text-transform:uppercase;margin-bottom:2px;}
+.mval{font-family:'Orbitron',monospace;font-size:14px;font-weight:700;color:var(--accent);text-shadow:0 0 10px #00e5ff44;}
+.mval.org{color:var(--accent2);text-shadow:0 0 10px #ff6d0044;}
+.mval.grn{color:var(--green);  text-shadow:0 0 10px #00e67644;}
+.mval.red{color:var(--red);    text-shadow:0 0 10px #ff174444;}
+.mval.ylw{color:var(--yellow); text-shadow:0 0 10px #ffd60044;}
+
+/* ─── HEATMAP PANEL ──────────────────────── */
+.heatmap-panel{border-top:1px solid var(--border);background:var(--bg);padding:8px 14px;flex-shrink:0;}
+.heatmap-bars{}
+.hbar-row{display:flex;align-items:center;gap:6px;margin-bottom:3px;}
+.hbar-name{font-family:'Share Tech Mono',monospace;font-size:9px;color:var(--dim);width:52px;flex-shrink:0;}
+.hbar-track{flex:1;height:5px;background:#1a3450;border-radius:2px;overflow:hidden;}
+.hbar-fill{height:100%;border-radius:2px;transition:width .4s ease;}
+.hbar-val{font-family:'Share Tech Mono',monospace;font-size:9px;width:24px;text-align:right;flex-shrink:0;}
+
+/* ─── EVENT LOG ──────────────────────────── */
+.log-wrap{
+  flex-shrink:0;height:100px;background:#050d18;
+  border-top:1px solid var(--border);overflow-y:auto;
+  padding:4px 14px;
+  font-family:'Share Tech Mono',monospace;font-size:10px;line-height:1.75;
+}
+.log-wrap::-webkit-scrollbar{width:3px;}
+.log-wrap::-webkit-scrollbar-thumb{background:var(--border);}
+.le{color:var(--dim);}
+.le .ts{color:#1a3450;margin-right:6px;}
+.le.info .m{color:var(--text);}
+.le.warn .m{color:var(--yellow);}
+.le.err  .m{color:var(--red);}
+.le.good .m{color:var(--green);}
+.le.sys  .m{color:var(--accent);}
+
+/* ─── MAP LEGEND ─────────────────────────── */
+.legend{
+  position:absolute;bottom:10px;left:10px;
+  background:#06101cdd;border:1px solid var(--border);
+  padding:8px 12px;font-size:10px;backdrop-filter:blur(4px);z-index:10;
+}
+.lr{display:flex;align-items:center;gap:7px;margin:2px 0;color:var(--dim);}
+.ld{width:11px;height:11px;border-radius:50%;flex-shrink:0;}
+.ll{width:18px;height:3px;flex-shrink:0;border-radius:2px;}
+
+/* ─── TOOLTIP ────────────────────────────── */
+#tip{
+  position:fixed;z-index:200;pointer-events:none;display:none;
+  background:#0b1520ee;border:1px solid var(--accent);
+  padding:7px 11px;font-family:'Share Tech Mono',monospace;
+  font-size:10px;line-height:1.7;color:var(--text);
+  box-shadow:var(--glow);max-width:220px;
+}
+
+/* ─── SAFETY OVERLAY BADGES ON MAP ───────── */
+.safety-flash{animation:sflash .5s infinite alternate;}
+@keyframes sflash{0%{opacity:1;}100%{opacity:.3;}}
+</style>
+</head>
+<body>
+
+<!-- HEADER -->
+<header>
+  <h1>⬡ MULTI-ROBOT TRAFFIC CONTROL SYSTEM</h1>
+  <div class="hdr-meta">
+    <span><span class="live-dot"></span>LIVE SIM</span>
+    <span id="hdClock">T = 0.0 s</span>
+    <span id="hdFps">-- FPS</span>
+    <span id="hdSafety" style="color:var(--green);">✔ SAFE</span>
+  </div>
+</header>
+
+<!-- CONTROLS -->
+<div class="controls">
+  <button class="primary" id="btnPlay" onclick="toggleSim()">▶ START</button>
+  <button onclick="resetSim()">↺ RESET</button>
+  <button class="danger" onclick="triggerEStop()">⚠ E-STOP ALL</button>
+  <button class="warn" onclick="addBlockage()">🚧 BLOCK LANE</button>
+  <button onclick="toggleHeatmap()" id="btnHeat">🔥 HEATMAP OFF</button>
+  <button onclick="forceDeadlock()">⚡ INJECT DEADLOCK</button>
+  <label style="margin-left:6px;">SPEED
+    <input type="range" id="sldSpeed" min="0.1" max="10" step="0.1" value="1"
+           oninput="sim.speed=+this.value;document.getElementById('spdVal').textContent=this.value+'×'">
+    <span id="spdVal">1×</span>
+  </label>
+  <label>ROBOTS
+    <select id="selRobots" onchange="resetSim()">
+      <option value="8">8 Robots</option>
+      <option value="10" selected>10 Robots</option>
+      <option value="12">12 Robots</option>
+      <option value="15">15 Robots</option>
+    </select>
+  </label>
+  <div class="pill green" id="pillArrived">0/10 ARRIVED</div>
+  <div class="pill red"   id="pillDeadlocks">0 DEADLOCKS</div>
+  <div class="pill ylw"   id="pillBlocked">0 BLOCKED LANES</div>
+  <div class="pill"       id="pillReplans">0 REPLANS</div>
+</div>
+
+<!-- MAIN -->
+<div class="main">
+
+  <!-- MAP -->
+  <div class="map-wrap">
+    <div class="timebar"><div class="timebar-fill" id="tbarFill" style="width:0%"></div></div>
+    <canvas id="warehouseCanvas"></canvas>
+    <div class="legend">
+      <div style="font-family:'Orbitron',monospace;font-size:8px;color:var(--accent);letter-spacing:2px;margin-bottom:5px;">LEGEND</div>
+      <div class="lr"><div class="ll" style="background:var(--green)"></div>NORMAL lane</div>
+      <div class="lr"><div class="ll" style="background:var(--yellow)"></div>NARROW / SERVICE</div>
+      <div class="lr"><div class="ll" style="background:var(--red)"></div>HUMAN ZONE</div>
+      <div class="lr"><div class="ll" style="background:var(--purple)"></div>INTERSECTION (reserved)</div>
+      <div style="border-top:1px solid var(--border);margin:4px 0;"></div>
+      <div class="lr"><div class="ld" style="background:var(--accent)"></div>MOVING</div>
+      <div class="lr"><div class="ld" style="background:var(--yellow)"></div>WAITING / SAFE-DIST</div>
+      <div class="lr"><div class="ld" style="background:var(--red)"></div>EMERGENCY STOP</div>
+      <div class="lr"><div class="ld" style="background:var(--green)"></div>ARRIVED</div>
+      <div class="lr"><div class="ld" style="background:var(--purple)"></div>PLANNING</div>
+    </div>
+  </div>
+
+  <!-- SIDEBAR -->
+  <div class="sidebar">
+    <div class="sec-title">▸ ROBOT STATUS (click to select)</div>
+    <div class="robot-list" id="robotList"></div>
+
+    <!-- SYSTEM METRICS -->
+    <div class="metrics-panel">
+      <div class="sec-title" style="padding:0 0 5px;border:none;position:static;background:transparent;">▸ PERFORMANCE METRICS</div>
+      <div class="mgrid">
+        <div class="mitem"><div class="mlabel">Throughput</div><div class="mval" id="mThru">0.000</div></div>
+        <div class="mitem"><div class="mlabel">Avg Delay</div><div class="mval ylw" id="mDelay">0.0s</div></div>
+        <div class="mitem"><div class="mlabel">Total Dist</div><div class="mval grn" id="mDist">0m</div></div>
+        <div class="mitem"><div class="mlabel">Replans</div><div class="mval org" id="mReplans">0</div></div>
+        <div class="mitem"><div class="mlabel">Deadlocks</div><div class="mval red" id="mDead">0</div></div>
+        <div class="mitem"><div class="mlabel">E-Stops</div><div class="mval red" id="mEstop">0</div></div>
+      </div>
+    </div>
+
+    <!-- HEATMAP PANEL -->
+    <div class="heatmap-panel" id="heatPanel">
+      <div class="sec-title" style="padding:0 0 5px;border:none;position:static;background:transparent;">▸ LANE HEATMAP — TOP HOTSPOTS</div>
+      <div class="heatmap-bars" id="heatBars"></div>
+    </div>
+
+  </div><!-- /sidebar -->
+</div><!-- /main -->
+
+<!-- EVENT LOG -->
+<div class="log-wrap" id="logPanel">
+  <div class="le sys"><span class="ts">[00:00]</span><span class="m">System ready. Press ▶ START to begin simulation.</span></div>
+</div>
+
+<div id="tip"></div>
+
+<script>
+'use strict';
+// ═══════════════════════════════════════════════════════════════
+//  MAP DEFINITION  (mirrors map_builder.py exactly)
+// ═══════════════════════════════════════════════════════════════
+const NODE_POS = {
+  ENTRY:{x:.05,y:.22}, N1:{x:.22,y:.22}, N2:{x:.44,y:.22}, N3:{x:.65,y:.22},
+  N4:{x:.22,y:.50},    N5:{x:.44,y:.50}, N6:{x:.65,y:.50},
+  N7:{x:.22,y:.78},    N8:{x:.44,y:.78}, N9:{x:.65,y:.78},
+  N10:{x:.44,y:.95},   EXIT:{x:.95,y:.78}
+};
+
+// type: normal|narrow|intersection|human_zone
+// safety: low|medium|high  (low→speed×1, medium×.75, high×.5)
+const LANE_DEFS = [
+  // Top aisle
+  {id:'A',    from:'ENTRY',to:'N1',  spd:2.0,len:10,type:'normal',      safety:'low',   bidir:true, reserv:false},
+  {id:'B',    from:'N1',  to:'N2',  spd:2.0,len:12,type:'normal',      safety:'low',   bidir:true, reserv:false},
+  {id:'C',    from:'N2',  to:'N3',  spd:1.0,len:8, type:'human_zone',  safety:'high',  bidir:true, reserv:false},
+  // Vertical intersections (require reservation)
+  {id:'D',    from:'N1',  to:'N4',  spd:1.5,len:15,type:'intersection', safety:'medium',bidir:true, reserv:true },
+  {id:'E',    from:'N3',  to:'N6',  spd:1.5,len:15,type:'intersection', safety:'medium',bidir:true, reserv:true },
+  // Middle aisle
+  {id:'F',    from:'N4',  to:'N5',  spd:2.0,len:12,type:'normal',      safety:'low',   bidir:true, reserv:false},
+  {id:'G',    from:'N5',  to:'N6',  spd:1.0,len:8, type:'human_zone',  safety:'high',  bidir:true, reserv:false},
+  // Middle→Bottom verticals
+  {id:'H',    from:'N4',  to:'N7',  spd:2.0,len:15,type:'normal',      safety:'low',   bidir:true, reserv:false},
+  {id:'I',    from:'N5',  to:'N8',  spd:2.0,len:15,type:'normal',      safety:'low',   bidir:true, reserv:false},
+  // Bottom aisle
+  {id:'J',    from:'N7',  to:'N8',  spd:2.5,len:12,type:'normal',      safety:'low',   bidir:true, reserv:false},
+  {id:'K',    from:'N8',  to:'N9',  spd:2.5,len:12,type:'normal',      safety:'low',   bidir:true, reserv:false},
+  {id:'L',    from:'N9',  to:'EXIT',spd:1.0,len:10,type:'human_zone',  safety:'high',  bidir:true, reserv:false},
+  // Narrow service corridor (one-way only, max 1 robot)
+  {id:'M',    from:'N8',  to:'N10', spd:0.5,len:6, type:'narrow',      safety:'high',  bidir:false,reserv:false},
+  // Shortcut lanes
+  {id:'N3_N6',from:'N3',  to:'N6',  spd:1.2,len:5, type:'normal',      safety:'medium',bidir:true, reserv:false},
+  {id:'N6_EXIT',from:'N6',to:'EXIT',spd:1.5,len:18,type:'normal',      safety:'low',   bidir:true, reserv:false},
+  {id:'N7_EXIT',from:'N7',to:'EXIT',spd:1.5,len:25,type:'normal',      safety:'low',   bidir:true, reserv:false},
+];
+
+// 15 missions pool (8–15 robots, deliberately mixed to create conflict)
+const MISSIONS_POOL = [
+  {id:'R01',start:'ENTRY',goal:'EXIT'},
+  {id:'R02',start:'ENTRY',goal:'N10'},
+  {id:'R03',start:'N3',   goal:'N7'},
+  {id:'R04',start:'N7',   goal:'ENTRY'},
+  {id:'R05',start:'N5',   goal:'EXIT'},
+  {id:'R06',start:'ENTRY',goal:'N6'},
+  {id:'R07',start:'N9',   goal:'N1'},
+  {id:'R08',start:'N4',   goal:'EXIT'},
+  {id:'R09',start:'N2',   goal:'N8'},
+  {id:'R10',start:'ENTRY',goal:'N3'},
+  {id:'R11',start:'N6',   goal:'N7'},
+  {id:'R12',start:'N8',   goal:'ENTRY'},
+  {id:'R13',start:'N3',   goal:'EXIT'},
+  {id:'R14',start:'N1',   goal:'N10'},
+  {id:'R15',start:'N7',   goal:'N3'},
+];
+
+// Visual colours per lane type
+const LANE_STROKE={normal:'#00e676',narrow:'#ffd600',human_zone:'#ff1744',intersection:'#d500f9'};
+const STATE_COLOR={
+  MOVING:'#00e5ff', WAITING:'#ffd600', ARRIVED:'#00e676',
+  PLANNING:'#d500f9', EMERGENCY_STOP:'#ff1744', IDLE:'#4a6a8a'
+};
+
+// Safe-following: max robots allowed per lane type
+const MAX_OCC={normal:2, intersection:1, human_zone:1, narrow:1};
+
+// ═══════════════════════════════════════════════════════════════
+//  GRAPH BUILDER
+// ═══════════════════════════════════════════════════════════════
+function buildGraph(){
+  const adj={}, lanes={};
+  Object.keys(NODE_POS).forEach(n=>adj[n]=[]);
+  LANE_DEFS.forEach(ld=>{
+    const lane={
+      ...ld,
+      occupants:[], congestion:0, blocked:false, reservation:null,
+      usageCount:0,       // total robot passes (heatmap)
+      congHistory:[],     // rolling congestion samples
+    };
+    lanes[ld.id]=lane;
+    if(!adj[ld.from])adj[ld.from]=[];
+    adj[ld.from].push(ld.id);
+    if(ld.bidir){
+      const rev={
+        ...ld, id:ld.id+'_rev', from:ld.to, to:ld.from, bidir:false,
+        occupants:[], congestion:0, blocked:false, reservation:null,
+        usageCount:0, congHistory:[],
+      };
+      lanes[rev.id]=rev;
+      if(!adj[rev.from])adj[rev.from]=[];
+      adj[rev.from].push(rev.id);
+    }
+  });
+  return {adj, lanes};
+}
+
+// ─── effective speed (safety + congestion) ───────────────────
+function effSpeed(lane){
+  const safetyFactor={low:1.0, medium:0.75, high:0.5}[lane.safety]??1.0;
+  const congFactor=1.0 - lane.congestion*0.7;
+  return Math.max(0.1, lane.spd * safetyFactor * congFactor);
+}
+function travelTime(lane){ return lane.len / effSpeed(lane); }
+
+// ─── Dijkstra path planner ───────────────────────────────────
+function dijkstra(adj, lanes, start, goal, robotId){
+  if(start===goal) return [];
+  const heap=[[0,start,[]]];
+  const best={};
+  while(heap.length){
+    heap.sort((a,b)=>a[0]-b[0]);
+    const [cost,node,path]=heap.shift();
+    if(best[node]!==undefined && best[node]<=cost) continue;
+    best[node]=cost;
+    if(node===goal) return path;
+    for(const lid of (adj[node]||[])){
+      const lane=lanes[lid];
+      if(!lane||lane.blocked) continue;
+      // Skip lanes reserved by someone else
+      if(lane.reservation && lane.reservation!==robotId) continue;
+      // Congestion penalty (heatmap-informed routing)
+      const congPenalty=1.0+lane.congestion*2.5;
+      // Extra penalty for near-full lanes (avoidance behaviour)
+      const occ=lane.occupants.length;
+      const cap=MAX_OCC[lane.type]??2;
+      const capPenalty=occ>=cap?999:occ/(cap+1)*1.5;
+      const nc=cost+(travelTime(lane)+capPenalty)*congPenalty;
+      if(best[lane.to]===undefined||best[lane.to]>nc)
+        heap.push([nc,lane.to,[...path,lid]]);
+    }
+  }
+  return null; // no path
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  SAFETY MODULE
+// ═══════════════════════════════════════════════════════════════
+// Returns {safe:bool, reason:string}
+function safetyCheck(lane, robotId){
+  // 1. Collision avoidance: respect per-type capacity
+  const cap=MAX_OCC[lane.type]??2;
+  if(lane.occupants.length>=cap)
+    return {safe:false, reason:`collision-avoidance: lane at capacity (${cap})`};
+  // 2. Narrow lane: strictly 0 others
+  if(lane.type==='narrow' && lane.occupants.length>0)
+    return {safe:false, reason:'narrow lane occupied'};
+  // 3. Intersection reservation
+  if(lane.reserv && lane.reservation && lane.reservation!==robotId)
+    return {safe:false, reason:`intersection reserved by ${lane.reservation}`};
+  // 4. Safe following distance: at least 0.3 gap
+  //    (simulated: we check occupant position fraction — here we use count heuristic)
+  if(lane.type==='human_zone' && lane.occupants.length>=1)
+    return {safe:false, reason:'human-zone safe-distance enforced'};
+  return {safe:true, reason:''};
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  ROBOT FACTORY
+// ═══════════════════════════════════════════════════════════════
+function makeRobot(id, start, goal){
+  return {
+    id, start, goal,
+    state:'IDLE', node:start, laneId:null,
+    path:[],
+    progress:0, laneElapsed:0, laneDuration:0,
+    speed:0,
+    totalDist:0, totalTime:0, waitTime:0,
+    lanesDone:0, replans:0, estops:0,
+    collisionAvoided:0,
+    safetyStatus:'OK',   // OK | WAIT | ESTOP
+    x:0, y:0,
+    trail:[],
+    color:STATE_COLOR['IDLE'],
+    _replanCooldown:0,
+  };
+}
+
+// ─── path planning ────────────────────────────────────────────
+function planPath(robot, graph){
+  robot.state='PLANNING';
+  const p=dijkstra(graph.adj, graph.lanes, robot.node, robot.goal, robot.id);
+  if(p===null){ robot.state='WAITING'; return false; }
+  robot.path=p;
+  robot.state=p.length?'MOVING':'ARRIVED';
+  return true;
+}
+
+// ─── replan (dynamic replanning) ─────────────────────────────
+function replan(robot, graph, reason){
+  if(robot._replanCooldown>0) return;
+  robot.replans++;
+  robot._replanCooldown=2.0; // 2 s cooldown to avoid thrashing
+  addLog(`${robot.id} replanning — ${reason}`,'warn');
+  // Release current lane
+  if(robot.laneId){
+    const l=graph.lanes[robot.laneId];
+    if(l){ l.occupants=l.occupants.filter(r=>r!==robot.id); recalcCong(l); }
+    robot.laneId=null;
+  }
+  planPath(robot, graph);
+}
+
+function recalcCong(lane){
+  const cap=lane.type==='narrow'?1:3;
+  lane.congestion=Math.min(1, lane.occupants.length/cap);
+}
+
+// ─── robot tick ───────────────────────────────────────────────
+function tickRobot(robot, dt, graph){
+  if(robot._replanCooldown>0) robot._replanCooldown-=dt;
+
+  if(['ARRIVED','IDLE','EMERGENCY_STOP'].includes(robot.state)) return;
+  robot.totalTime+=dt;
+
+  // ── Traversing current lane ──
+  if(robot.state==='MOVING' && robot.laneId){
+    const lane=graph.lanes[robot.laneId];
+    if(!lane){ replan(robot,graph,'lane disappeared'); return; }
+    robot.speed=effSpeed(lane);
+    robot.laneElapsed+=dt;
+    robot.progress=Math.min(1, robot.laneElapsed/robot.laneDuration);
+
+    if(robot.laneElapsed>=robot.laneDuration){
+      // exit lane
+      lane.occupants=lane.occupants.filter(r=>r!==robot.id);
+      if(lane.reservation===robot.id) lane.reservation=null;
+      recalcCong(lane);
+      robot.node=lane.to;
+      robot.totalDist+=lane.len;
+      robot.lanesDone++;
+      robot.laneId=null;
+      robot.progress=0; robot.laneElapsed=0;
+      robot.safetyStatus='OK';
+      if(robot.node===robot.goal){
+        robot.state='ARRIVED'; robot.speed=0;
+        addLog(`${robot.id} ✓ arrived at ${robot.goal}`,'good');
+      } else {
+        robot.state='MOVING';
+      }
+    }
+    return;
+  }
+
+  // ── Choose next lane ──
+  if(!robot.path.length){
+    if(robot.node===robot.goal){ robot.state='ARRIVED'; return; }
+    replan(robot,graph,'path exhausted');
+    return;
+  }
+
+  const nextId=robot.path[0];
+  const lane=graph.lanes[nextId];
+  if(!lane){ replan(robot,graph,`lane ${nextId} not found`); return; }
+
+  // SAFETY CHECK 1: blocked lane → dynamic replan
+  if(lane.blocked){
+    robot.waitTime+=dt; robot.state='WAITING'; robot.safetyStatus='WAIT';
+    replan(robot,graph,`${nextId} is blocked`);
+    return;
+  }
+
+  // SAFETY CHECK 2: lane reservation (intersection)
+  if(lane.reserv && lane.reservation && lane.reservation!==robot.id){
+    robot.waitTime+=dt; robot.state='WAITING'; robot.safetyStatus='WAIT';
+    return;
+  }
+
+  // SAFETY CHECK 3: collision avoidance + safe following distance
+  const sc=safetyCheck(lane, robot.id);
+  if(!sc.safe){
+    robot.waitTime+=dt; robot.state='WAITING'; robot.safetyStatus='WAIT';
+    robot.collisionAvoided++;
+    return;
+  }
+
+  // SAFETY CHECK 4: dynamic reroute if congestion ≥ 0.85
+  if(lane.congestion>=0.85){
+    const alt=dijkstra(graph.adj,graph.lanes,robot.node,robot.goal,robot.id);
+    if(alt && JSON.stringify(alt)!==JSON.stringify(robot.path)){
+      robot.path=alt; robot.replans++;
+      addLog(`${robot.id} rerouting around congestion on ${nextId}`,'warn');
+      return;
+    }
+  }
+
+  // ── All checks passed → enter lane ──
+  robot.path.shift();
+  // Reserve intersection
+  if(lane.reserv) lane.reservation=robot.id;
+  lane.occupants.push(robot.id);
+  lane.usageCount++;
+  recalcCong(lane);
+  robot.laneId=nextId;
+  robot.speed=effSpeed(lane);
+  robot.laneElapsed=0;
+  robot.laneDuration=travelTime(lane);
+  robot.progress=0;
+  robot.state='MOVING';
+  robot.safetyStatus='OK';
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  DEADLOCK DETECTOR & RESOLVER
+// ═══════════════════════════════════════════════════════════════
+function detectAndResolveDeadlocks(robots, graph){
+  // Build wait-for graph
+  const waitFor={};
+  robots.forEach(r=>{
+    if(r.state!=='WAITING'||!r.path.length) return;
+    const lane=graph.lanes[r.path[0]];
+    if(!lane) return;
+    const blockers=[...lane.occupants.filter(o=>o!==r.id)];
+    if(lane.reservation && lane.reservation!==r.id) blockers.push(lane.reservation);
+    if(blockers.length) waitFor[r.id]=blockers;
+  });
+
+  // DFS cycle detection
+  const visited=new Set(), inStack=new Set();
+  const cycles=[];
+  function dfs(node,path){
+    visited.add(node); inStack.add(node);
+    for(const nb of (waitFor[node]||[])){
+      if(!visited.has(nb)) dfs(nb,[...path,nb]);
+      else if(inStack.has(nb)){
+        const idx=path.indexOf(nb);
+        if(idx>=0) cycles.push(path.slice(idx));
+      }
+    }
+    inStack.delete(node);
+  }
+  Object.keys(waitFor).forEach(n=>{ if(!visited.has(n)) dfs(n,[n]); });
+
+  // Resolve each cycle
+  cycles.forEach(cycle=>{
+    sim.deadlocks++;
+    addLog(`⚡ DEADLOCK detected! Cycle: ${cycle.join('→')}`,'err');
+    // Force the robot with most replans to replan (least fortunate)
+    const byId={};
+    robots.forEach(r=>byId[r.id]=r);
+    const worst=cycle.map(id=>byId[id]).filter(Boolean)
+                      .sort((a,b)=>b.replans-a.replans)[0];
+    if(worst){
+      worst.waitTime+=2.0; // penalise
+      worst._replanCooldown=0; // override cooldown for deadlock resolution
+      replan(worst, graph, 'deadlock resolution');
+      addLog(`  → Breaking deadlock: forced ${worst.id} to replan`,'warn');
+    }
+  });
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  LANE HEATMAP TRACKER
+// ═══════════════════════════════════════════════════════════════
+function recordHeatmap(graph, simTime){
+  Object.values(graph.lanes).forEach(lane=>{
+    lane.congHistory.push(lane.congestion);
+    if(lane.congHistory.length>300) lane.congHistory.shift();
+  });
+}
+
+function heatmapHotspots(graph, n=6){
+  // Rank by average congestion (non-reverse lanes only for display)
+  return Object.values(graph.lanes)
+    .filter(l=>!l.id.endsWith('_rev'))
+    .map(l=>{
+      const avg=l.congHistory.length
+        ? l.congHistory.reduce((a,b)=>a+b,0)/l.congHistory.length : 0;
+      return {id:l.id, avg, usage:l.usageCount, cur:l.congestion, type:l.type};
+    })
+    .sort((a,b)=>b.avg-a.avg)
+    .slice(0,n);
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  SIM STATE
+// ═══════════════════════════════════════════════════════════════
+let graph, robots, sim;
+let heatmapMode=false;
+let selectedRobot=null;
+let animId=null;
+let lastFrameTs=0, accumulator=0;
+let lastDeadlockCheck=0;
+let lastHeatRecord=0;
+let fpsHistory=[];
+const DT=0.08;       // simulation time step (seconds)
+const SIM_DUR=200;   // max simulation duration
+
+function initSim(){
+  graph=buildGraph();
+  const count=parseInt(document.getElementById('selRobots').value);
+  robots=MISSIONS_POOL.slice(0,count).map(m=>makeRobot(m.id,m.start,m.goal));
+  sim={time:0, running:false, speed:1.0, deadlocks:0, totalEstops:0};
+  sim.speed=parseFloat(document.getElementById('sldSpeed').value);
+  // Initial planning
+  robots.forEach(r=>{ planPath(r,graph); updateRobotXY(r); });
+  addLog(`Simulation initialized: ${count} robots assigned.`,'sys');
+  document.getElementById('btnPlay').textContent='▶ START';
+  document.getElementById('tbarFill').style.width='0%';
+  renderAll();
+}
+
+// ─── position interpolation ───────────────────────────────────
+function updateRobotXY(robot){
+  let tx, ty;
+  if(robot.laneId){
+    const lane=graph.lanes[robot.laneId];
+    if(lane){
+      const fp=NODE_POS[lane.from], tp=NODE_POS[lane.to];
+      tx=fp.x+(tp.x-fp.x)*robot.progress;
+      ty=fp.y+(tp.y-fp.y)*robot.progress;
+    }
+  }
+  if(tx===undefined){
+    const np=NODE_POS[robot.node];
+    if(np){ tx=np.x; ty=np.y; }
+  }
+  if(tx!==undefined){ robot.x=tx; robot.y=ty; }
+  robot.trail.push({x:robot.x, y:robot.y});
+  if(robot.trail.length>20) robot.trail.shift();
+  robot.color=STATE_COLOR[robot.state]??'#ffffff';
+}
+
+// ─── simulation step ──────────────────────────────────────────
+function simStep(dtReal){
+  if(!sim.running) return;
+  accumulator+=dtReal*sim.speed;
+  while(accumulator>=DT){
+    accumulator-=DT;
+    sim.time+=DT;
+    robots.forEach(r=>tickRobot(r,DT,graph));
+
+    // Deadlock check every 4 s sim-time
+    if(sim.time-lastDeadlockCheck>=4.0){
+      detectAndResolveDeadlocks(robots,graph);
+      lastDeadlockCheck=sim.time;
+    }
+    // Heatmap record every 0.5 s sim-time
+    if(sim.time-lastHeatRecord>=0.5){
+      recordHeatmap(graph,sim.time);
+      lastHeatRecord=sim.time;
+    }
+
+    if(robots.every(r=>r.state==='ARRIVED')){
+      sim.running=false;
+      document.getElementById('btnPlay').textContent='▶ START';
+      addLog('✓ All robots reached their goals! Simulation complete.','good');
+      break;
+    }
+    if(sim.time>=SIM_DUR){
+      sim.running=false;
+      document.getElementById('btnPlay').textContent='▶ START';
+      const pending=robots.filter(r=>r.state!=='ARRIVED').length;
+      addLog(`⏱ Time limit reached. ${pending} robot(s) still en route.`,'warn');
+      break;
+    }
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  CONTROL ACTIONS
+// ═══════════════════════════════════════════════════════════════
+function toggleSim(){
+  sim.running=!sim.running;
+  document.getElementById('btnPlay').textContent=sim.running?'⏸ PAUSE':'▶ START';
+  addLog(sim.running?'Simulation started.':'Simulation paused.', sim.running?'sys':'warn');
+}
+
+function resetSim(){
+  sim&&(sim.running=false);
+  if(animId) cancelAnimationFrame(animId);
+  accumulator=0; lastDeadlockCheck=0; lastHeatRecord=0;
+  selectedRobot=null;
+  initSim();
+  loop(performance.now());
+}
+
+// Emergency stop all active robots
+function triggerEStop(){
+  let count=0;
+  robots.forEach(r=>{
+    if(r.state==='ARRIVED') return;
+    r.state='EMERGENCY_STOP'; r.speed=0; r.estops++; r.safetyStatus='ESTOP';
+    sim.totalEstops++;
+    if(r.laneId){
+      const l=graph.lanes[r.laneId];
+      if(l){ l.occupants=l.occupants.filter(o=>o!==r.id); recalcCong(l); }
+      r.laneId=null;
+    }
+    count++;
+  });
+  addLog(`⚠ EMERGENCY STOP issued — ${count} robot(s) halted.`,'err');
+  // Auto-resume after 4 s real-time
+  setTimeout(()=>{
+    robots.forEach(r=>{
+      if(r.state==='EMERGENCY_STOP'){
+        r._replanCooldown=0; planPath(r,graph); r.safetyStatus='OK';
+      }
+    });
+    addLog('Emergency cleared — robots resuming.','warn');
+  }, 4000);
+}
+
+// Block a random non-blocked normal lane
+function addBlockage(){
+  const cands=Object.values(graph.lanes).filter(l=>!l.blocked&&l.type==='normal'&&!l.id.endsWith('_rev'));
+  if(!cands.length){ addLog('No available lanes to block.','warn'); return; }
+  const lane=cands[Math.floor(Math.random()*cands.length)];
+  lane.blocked=true;
+  // Evict occupants
+  lane.occupants.forEach(rid=>{
+    const r=robots.find(x=>x.id===rid);
+    if(r){ r._replanCooldown=0; replan(r,graph,`lane ${lane.id} blocked`); }
+  });
+  lane.occupants=[]; recalcCong(lane);
+  addLog(`🚧 Lane ${lane.id} blocked for 8 s.`,'err');
+  setTimeout(()=>{ lane.blocked=false; addLog(`Lane ${lane.id} cleared.`,'good'); },8000);
+}
+
+// Inject an artificial deadlock (two robots pointing at each other)
+function forceDeadlock(){
+  // Pick two moving robots facing opposite narrow paths
+  const moving=robots.filter(r=>r.state==='MOVING'||r.state==='WAITING');
+  if(moving.length<2){ addLog('Need ≥2 active robots for deadlock injection.','warn'); return; }
+  // Block both their next lanes artificially for a moment
+  [moving[0],moving[1]].forEach(r=>{
+    if(!r.path.length) return;
+    const l=graph.lanes[r.path[0]];
+    if(!l) return;
+    // Mutually occupy each other's target lanes
+    if(!l.occupants.includes(moving[1].id)) l.occupants.push(moving[1].id);
+    recalcCong(l);
+  });
+  addLog('⚡ Artificial deadlock injected — detection will resolve it.','err');
+}
+
+function toggleHeatmap(){
+  heatmapMode=!heatmapMode;
+  document.getElementById('btnHeat').textContent=heatmapMode?'🔥 HEATMAP ON':'🔥 HEATMAP OFF';
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  CANVAS RENDERING
+// ═══════════════════════════════════════════════════════════════
+const canvas=document.getElementById('warehouseCanvas');
+const ctx=canvas.getContext('2d');
+
+function resizeCanvas(){
+  const wrap=canvas.parentElement;
+  canvas.width=wrap.clientWidth;
+  canvas.height=wrap.clientHeight;
+}
+
+function w2c(wx,wy){
+  const pad=48;
+  return {
+    x: pad + wx*(canvas.width -pad*2),
+    y: pad + wy*(canvas.height-pad*2)
+  };
+}
+
+function drawMap(){
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+
+  // Subtle grid
+  ctx.save();
+  ctx.strokeStyle='#0d1a2b66'; ctx.lineWidth=1;
+  for(let i=0;i<=10;i++){
+    ctx.beginPath(); ctx.moveTo(canvas.width/10*i,0); ctx.lineTo(canvas.width/10*i,canvas.height); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(0,canvas.height/10*i); ctx.lineTo(canvas.width,canvas.height/10*i); ctx.stroke();
+  }
+  ctx.restore();
+
+  // ── Draw lanes ──
+  const drawn=new Set();
+  Object.values(graph.lanes).forEach(lane=>{
+    const fp=NODE_POS[lane.from], tp=NODE_POS[lane.to];
+    if(!fp||!tp) return;
+    const fc=w2c(fp.x,fp.y), tc=w2c(tp.x,tp.y);
+    const isRev=lane.id.endsWith('_rev');
+
+    // Offset reverse lane slightly to show bidirectionality
+    let ox=0,oy=0;
+    if(isRev){
+      const dx=tc.x-fc.x, dy=tc.y-fc.y;
+      const len=Math.hypot(dx,dy)||1;
+      ox=-dy/len*4; oy=dx/len*4;
+    }
+
+    const stroke=LANE_STROKE[lane.type]??'#00e676';
+
+    // Heatmap overlay
+    if(heatmapMode){
+      const avgCong=lane.congHistory.length
+        ? lane.congHistory.slice(-20).reduce((a,b)=>a+b,0)/Math.min(20,lane.congHistory.length)
+        : 0;
+      const heat=`rgba(255,${Math.round(180*(1-avgCong))},0,${0.15+avgCong*0.7})`;
+      ctx.save();
+      ctx.strokeStyle=heat; ctx.lineWidth=14;
+      ctx.beginPath();
+      ctx.moveTo(fc.x+ox,fc.y+oy); ctx.lineTo(tc.x+ox,tc.y+oy);
+      ctx.stroke();
+      ctx.restore();
+    }
+
+    // Lane line
+    ctx.save();
+    let alpha=heatmapMode?0.45:0.65;
+    if(lane.blocked){ ctx.strokeStyle='#ff174499'; ctx.lineWidth=4; ctx.setLineDash([6,4]); }
+    else {
+      ctx.strokeStyle=stroke+(Math.round(alpha*255).toString(16).padStart(2,'0'));
+      ctx.lineWidth=lane.type==='narrow'?2.5:3.5;
+      if(lane.type==='narrow') ctx.setLineDash([7,5]);
+    }
+    ctx.beginPath();
+    ctx.moveTo(fc.x+ox,fc.y+oy); ctx.lineTo(tc.x+ox,tc.y+oy);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.restore();
+
+    // Direction arrow at midpoint
+    const mx=(fc.x+tc.x)/2+ox, my=(fc.y+tc.y)/2+oy;
+    const ang=Math.atan2(tc.y-fc.y,tc.x-fc.x);
+    ctx.save();
+    ctx.fillStyle=lane.blocked?'#ff1744aa':stroke+'cc';
+    ctx.translate(mx,my); ctx.rotate(ang);
+    ctx.beginPath(); ctx.moveTo(6,0); ctx.lineTo(-5,-3); ctx.lineTo(-5,3); ctx.closePath(); ctx.fill();
+    ctx.restore();
+
+    // Reservation lock indicator
+    if(lane.reservation){
+      ctx.save();
+      ctx.fillStyle='#d500f9cc';
+      ctx.font='10px sans-serif';
+      ctx.fillText('🔒',mx+ox-5,my+oy-10);
+      ctx.restore();
+    }
+
+    // Blocked warning
+    if(lane.blocked){
+      ctx.save();
+      ctx.font='14px sans-serif';
+      ctx.fillText('🚧',mx-8,my+6);
+      ctx.restore();
+    }
+  });
+
+  // ── Draw nodes ──
+  Object.entries(NODE_POS).forEach(([nodeId,pos])=>{
+    const c=w2c(pos.x,pos.y);
+    const special=nodeId==='ENTRY'||nodeId==='EXIT';
+    const r=special?15:10;
+
+    // Check if any robot is at this node
+    const hasRobot=robots.some(rb=>!rb.laneId&&rb.node===nodeId&&rb.state!=='ARRIVED');
+
+    ctx.save();
+    ctx.beginPath(); ctx.arc(c.x,c.y,r,0,Math.PI*2);
+    ctx.fillStyle=special?'#00e5ff14':'#0b1520';
+    ctx.strokeStyle=special?'#00e5ffcc':hasRobot?'#ffd600':'#1a3450';
+    ctx.lineWidth=special?2:1.5;
+    ctx.fill(); ctx.stroke();
+    ctx.fillStyle=special?'#00e5ff':'#4a6a8a';
+    ctx.font=special?'bold 8px Orbitron':'7px Share Tech Mono';
+    ctx.textAlign='center'; ctx.textBaseline='middle';
+    ctx.fillText(nodeId,c.x,c.y-(nodeId.length>2?1:0));
+    ctx.restore();
+  });
+
+  // ── Draw robot trails ──
+  robots.forEach(robot=>{
+    if(robot.trail.length<2) return;
+    ctx.save();
+    ctx.strokeStyle=robot.color+'33'; ctx.lineWidth=1.5;
+    ctx.beginPath();
+    robot.trail.forEach((pt,i)=>{
+      const cp=w2c(pt.x,pt.y);
+      i===0?ctx.moveTo(cp.x,cp.y):ctx.lineTo(cp.x,cp.y);
+    });
+    ctx.stroke();
+    ctx.restore();
+  });
+
+  // ── Draw robots ──
+  robots.forEach(robot=>{
+    const cp=w2c(robot.x,robot.y);
+    const isSelected=robot.id===selectedRobot;
+    const rr=12;
+
+    ctx.save();
+    // Outer glow
+    const grd=ctx.createRadialGradient(cp.x,cp.y,0,cp.x,cp.y,rr*3);
+    grd.addColorStop(0,robot.color+'44');
+    grd.addColorStop(1,'transparent');
+    ctx.fillStyle=grd;
+    ctx.beginPath(); ctx.arc(cp.x,cp.y,rr*3,0,Math.PI*2); ctx.fill();
+
+    // Safety-status ring (collision avoidance visual)
+    if(robot.safetyStatus==='WAIT'){
+      ctx.beginPath(); ctx.arc(cp.x,cp.y,rr+4,0,Math.PI*2);
+      ctx.strokeStyle='#ffd600aa'; ctx.lineWidth=2;
+      ctx.setLineDash([4,3]); ctx.stroke(); ctx.setLineDash([]);
+    } else if(robot.safetyStatus==='ESTOP'){
+      ctx.beginPath(); ctx.arc(cp.x,cp.y,rr+5,0,Math.PI*2);
+      ctx.strokeStyle='#ff174499'; ctx.lineWidth=2.5;
+      ctx.setLineDash([3,2]); ctx.stroke(); ctx.setLineDash([]);
+    }
+
+    // Body
+    ctx.beginPath(); ctx.arc(cp.x,cp.y,rr,0,Math.PI*2);
+    ctx.fillStyle=robot.color+'cc';
+    ctx.strokeStyle=robot.color;
+    ctx.lineWidth=isSelected?3:1.5;
+    if(robot.state==='EMERGENCY_STOP') ctx.setLineDash([3,2]);
+    ctx.fill(); ctx.stroke(); ctx.setLineDash([]);
+
+    // Selection ring
+    if(isSelected){
+      ctx.beginPath(); ctx.arc(cp.x,cp.y,rr+7,0,Math.PI*2);
+      ctx.strokeStyle='#ffffff55'; ctx.lineWidth=1.5; ctx.stroke();
+    }
+
+    // ID label
+    ctx.fillStyle='#000d1a';
+    ctx.font='bold 7px Orbitron';
+    ctx.textAlign='center'; ctx.textBaseline='middle';
+    ctx.fillText(robot.id.replace('R',''),cp.x,cp.y);
+
+    // Speed bar (above robot)
+    if(robot.state==='MOVING'){
+      const bw=24,bh=3;
+      const bx=cp.x-bw/2, by=cp.y-rr-8;
+      ctx.fillStyle='#06101c'; ctx.fillRect(bx,by,bw,bh);
+      const spPct=Math.min(1, robot.speed/2.5);
+      const spColor=spPct>0.8?'#ff6d00':spPct>0.4?'#ffd600':'#00e676';
+      ctx.fillStyle=spColor+'cc'; ctx.fillRect(bx,by,bw*spPct,bh);
+    }
+
+    // Waiting indicator (pulsing dot)
+    if(robot.state==='WAITING'){
+      const alpha=0.4+0.6*Math.abs(Math.sin(Date.now()/400));
+      ctx.fillStyle=`rgba(255,214,0,${alpha})`;
+      ctx.beginPath(); ctx.arc(cp.x+rr+3,cp.y-rr+3,3,0,Math.PI*2); ctx.fill();
+    }
+
+    ctx.restore();
+  });
+
+  // ── Heatmap legend ──
+  if(heatmapMode){
+    const x=canvas.width-130, y=10;
+    ctx.save();
+    ctx.fillStyle='#06101ccc'; ctx.fillRect(x,y,120,18);
+    const grad=ctx.createLinearGradient(x+4,0,x+116,0);
+    grad.addColorStop(0,'rgba(0,230,118,.8)');
+    grad.addColorStop(0.5,'rgba(255,214,0,.8)');
+    grad.addColorStop(1,'rgba(255,23,68,.8)');
+    ctx.fillStyle=grad; ctx.fillRect(x+4,y+4,112,10);
+    ctx.fillStyle='#c8dff0'; ctx.font='7px Share Tech Mono';
+    ctx.textAlign='left';  ctx.fillText('LOW',x+4,y+20);
+    ctx.textAlign='right'; ctx.fillText('HIGH',x+116,y+20);
+    ctx.restore();
+  }
+
+  // ── Sim time watermark ──
+  ctx.save();
+  ctx.fillStyle='#1a3450'; ctx.font='10px Orbitron';
+  ctx.textAlign='right';
+  ctx.fillText(`T=${sim.time.toFixed(1)}s`,canvas.width-10,canvas.height-8);
+  ctx.restore();
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  SIDEBAR RENDERING
+// ═══════════════════════════════════════════════════════════════
+function renderRobotList(){
+  const el=document.getElementById('robotList');
+  el.innerHTML=robots.map(robot=>{
+    const progressPct=robot.laneId?robot.progress*100:(robot.state==='ARRIVED'?100:0);
+    const waitPct=Math.min(100,(robot.waitTime/Math.max(1,sim.time))*300);
+    const spPct=Math.min(100,(robot.speed/2.5)*100);
+    const safeIcon=robot.safetyStatus==='OK'?'<span class="safety-ok">✔ SAFE</span>':
+                   robot.safetyStatus==='WAIT'?'<span class="safety-warn">⏸ WAIT</span>':
+                   '<span class="safety-stop">⛔ ESTOP</span>';
+    return `
+    <div class="rcard ${robot.state==='ARRIVED'?'arrived':''} ${robot.id===selectedRobot?'selected':''}"
+         onclick="selectRobot('${robot.id}')">
+      <div class="rcard-hdr">
+        <span class="rname">${robot.id}</span>
+        <span class="rstate s-${robot.state}">${robot.state.replace('_',' ')}</span>
+      </div>
+      <div class="rroute"><span>${robot.start}</span> → <span>${robot.goal}</span>
+        ${robot.laneId?` | lane <span>${robot.laneId}</span>`:''}
+        &nbsp;${safeIcon}
+      </div>
+      <div class="brow">
+        <span class="blabel">PROG</span>
+        <div class="btrack"><div class="bfill bp" style="width:${progressPct.toFixed(1)}%"></div></div>
+        <span class="bval">${progressPct.toFixed(0)}%</span>
+      </div>
+      <div class="brow">
+        <span class="blabel">WAIT</span>
+        <div class="btrack"><div class="bfill bw" style="width:${waitPct.toFixed(1)}%"></div></div>
+        <span class="bval">${robot.waitTime.toFixed(1)}s</span>
+      </div>
+      <div class="brow">
+        <span class="blabel">SPEED</span>
+        <div class="btrack"><div class="bfill bs" style="width:${spPct.toFixed(1)}%"></div></div>
+        <span class="bval">${robot.speed.toFixed(1)}</span>
+      </div>
+      <div class="rstats">
+        <span class="ms">DIST <span>${robot.totalDist.toFixed(0)}m</span></span>
+        <span class="ms">LANES <span>${robot.lanesDone}</span></span>
+        <span class="ms">REPLANS <span>${robot.replans}</span></span>
+        <span class="ms">CA <span>${robot.collisionAvoided}</span></span>
+        <span class="ms">ESTOP <span>${robot.estops}</span></span>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function selectRobot(id){ selectedRobot=selectedRobot===id?null:id; }
+
+// ─── metrics ──────────────────────────────────────────────────
+function updateMetrics(){
+  const arrived=robots.filter(r=>r.state==='ARRIVED').length;
+  const totalWait=robots.reduce((s,r)=>s+r.waitTime,0);
+  const totalDist=robots.reduce((s,r)=>s+r.totalDist,0);
+  const totalReplans=robots.reduce((s,r)=>s+r.replans,0);
+  const totalEstops=robots.reduce((s,r)=>s+r.estops,0);
+  const totalCA=robots.reduce((s,r)=>s+r.collisionAvoided,0);
+  const throughput=sim.time>0?(arrived/sim.time).toFixed(4):'0.0000';
+  const avgDelay=robots.length>0?(totalWait/robots.length).toFixed(1):'0.0';
+  const blockedCount=Object.values(graph.lanes).filter(l=>l.blocked).length;
+  const allEstops=sim.totalEstops;
+
+  // Header metrics
+  document.getElementById('hdClock').textContent=`T = ${sim.time.toFixed(1)} s`;
+  const allSafe=robots.every(r=>r.state==='ARRIVED'||r.safetyStatus==='OK');
+  document.getElementById('hdSafety').textContent=allSafe?'✔ SAFE':'⚠ CAUTION';
+  document.getElementById('hdSafety').style.color=allSafe?'var(--green)':'var(--yellow)';
+
+  // Pills
+  document.getElementById('pillArrived').textContent=`${arrived}/${robots.length} ARRIVED`;
+  document.getElementById('pillDeadlocks').textContent=`${sim.deadlocks} DEADLOCKS`;
+  document.getElementById('pillBlocked').textContent=`${blockedCount} BLOCKED`;
+  document.getElementById('pillReplans').textContent=`${totalReplans} REPLANS`;
+
+  // Metric boxes
+  document.getElementById('mThru').textContent=throughput;
+  document.getElementById('mDelay').textContent=avgDelay+'s';
+  document.getElementById('mDist').textContent=totalDist.toFixed(0)+'m';
+  document.getElementById('mReplans').textContent=totalReplans;
+  document.getElementById('mDead').textContent=sim.deadlocks;
+  document.getElementById('mEstop').textContent=allEstops;
+
+  // Time bar
+  document.getElementById('tbarFill').style.width=Math.min(100,sim.time/SIM_DUR*100)+'%';
+}
+
+// ─── heatmap panel ────────────────────────────────────────────
+function renderHeatmap(){
+  const hotspots=heatmapHotspots(graph,6);
+  const el=document.getElementById('heatBars');
+  if(!hotspots.length){ el.innerHTML='<div style="color:var(--dim);font-size:10px;font-family:Share Tech Mono">No data yet.</div>'; return; }
+  const maxAvg=Math.max(0.01,...hotspots.map(h=>h.avg));
+  el.innerHTML=hotspots.map(h=>{
+    const pct=(h.avg/maxAvg*100).toFixed(1);
+    const col=h.avg>0.6?'#ff1744':h.avg>0.3?'#ffd600':'#00e676';
+    return `<div class="hbar-row">
+      <span class="hbar-name">${h.id}</span>
+      <div class="hbar-track"><div class="hbar-fill" style="width:${pct}%;background:${col}"></div></div>
+      <span class="hbar-val" style="color:${col}">${(h.avg*100).toFixed(0)}%</span>
+    </div>`;
+  }).join('');
+}
+
+// ─── event log ────────────────────────────────────────────────
+function addLog(msg, type='info'){
+  const panel=document.getElementById('logPanel');
+  const mm=String(Math.floor(sim.time/60)).padStart(2,'0');
+  const ss=String(Math.floor(sim.time%60)).padStart(2,'0');
+  const div=document.createElement('div');
+  div.className=`le ${type}`;
+  div.innerHTML=`<span class="ts">[${mm}:${ss}]</span><span class="m">${msg}</span>`;
+  panel.appendChild(div);
+  panel.scrollTop=panel.scrollHeight;
+  if(panel.children.length>150) panel.removeChild(panel.firstChild);
+}
+
+// ─── tooltip ──────────────────────────────────────────────────
+canvas.addEventListener('mousemove',e=>{
+  const rect=canvas.getBoundingClientRect();
+  const mx=e.clientX-rect.left, my=e.clientY-rect.top;
+  const tip=document.getElementById('tip');
+  let found=false;
+
+  // Check robot hit
+  robots.forEach(robot=>{
+    const cp=w2c(robot.x,robot.y);
+    if(Math.hypot(mx-cp.x,my-cp.y)<15){
+      tip.style.display='block';
+      tip.style.left=(e.clientX+14)+'px';
+      tip.style.top=(e.clientY+14)+'px';
+      const lane=robot.laneId?graph.lanes[robot.laneId]:null;
+      const laneType=lane?lane.type:'—';
+      const laneSafety=lane?lane.safety:'—';
+      tip.innerHTML=
+        `<b style="color:${robot.color}">${robot.id}</b><br>`+
+        `State: <b>${robot.state}</b><br>`+
+        `Route: ${robot.start} → ${robot.goal}<br>`+
+        `Node: ${robot.node}<br>`+
+        `Lane: ${robot.laneId||'—'} (${laneType}, ${laneSafety})<br>`+
+        `Speed: ${robot.speed.toFixed(2)} m/s<br>`+
+        `Progress: ${(robot.progress*100).toFixed(1)}%<br>`+
+        `Distance: ${robot.totalDist.toFixed(1)} m<br>`+
+        `Wait: ${robot.waitTime.toFixed(2)} s<br>`+
+        `Replans: ${robot.replans} | CA: ${robot.collisionAvoided}<br>`+
+        `Safety: <b>${robot.safetyStatus}</b>`;
+      found=true;
+    }
+  });
+
+  // Check lane hover
+  if(!found){
+    Object.values(graph.lanes).filter(l=>!l.id.endsWith('_rev')).forEach(lane=>{
+      const fp=NODE_POS[lane.from],tp=NODE_POS[lane.to];
+      if(!fp||!tp) return;
+      const fc=w2c(fp.x,fp.y), tc=w2c(tp.x,tp.y);
+      const mid={x:(fc.x+tc.x)/2,y:(fc.y+tc.y)/2};
+      if(Math.hypot(mx-mid.x,my-mid.y)<18){
+        const avgCong=lane.congHistory.length
+          ? (lane.congHistory.slice(-20).reduce((a,b)=>a+b,0)/Math.min(20,lane.congHistory.length)*100).toFixed(1)
+          : '0.0';
+        tip.style.display='block';
+        tip.style.left=(e.clientX+14)+'px';
+        tip.style.top=(e.clientY+14)+'px';
+        tip.innerHTML=
+          `<b style="color:${LANE_STROKE[lane.type]??'#fff'}">Lane ${lane.id}</b><br>`+
+          `Type: ${lane.type} | Safety: ${lane.safety}<br>`+
+          `Speed limit: ${lane.spd} m/s<br>`+
+          `Length: ${lane.len} m | Bidir: ${lane.bidir}<br>`+
+          `Reserv required: ${lane.reserv}<br>`+
+          `Occupants: ${lane.occupants.join(', ')||'none'}<br>`+
+          `Congestion: ${(lane.congestion*100).toFixed(0)}%<br>`+
+          `Avg congestion: ${avgCong}%<br>`+
+          `Total passes: ${lane.usageCount}<br>`+
+          `Blocked: ${lane.blocked}`;
+        found=true;
+      }
+    });
+  }
+
+  if(!found) tip.style.display='none';
+});
+canvas.addEventListener('mouseleave',()=>{ document.getElementById('tip').style.display='none'; });
+
+// ═══════════════════════════════════════════════════════════════
+//  MAIN RENDER LOOP
+// ═══════════════════════════════════════════════════════════════
+let lastFpsTs=0;
+function renderAll(){
+  renderRobotList();
+  updateMetrics();
+  renderHeatmap();
+}
+
+function loop(ts){
+  animId=requestAnimationFrame(loop);
+  const dtReal=Math.min((ts-(lastFrameTs||ts))/1000, 0.1);
+  lastFrameTs=ts;
+
+  // FPS counter
+  fpsHistory.push(1/Math.max(dtReal,0.001));
+  if(fpsHistory.length>30) fpsHistory.shift();
+  if(ts-lastFpsTs>500){
+    const fps=Math.round(fpsHistory.reduce((a,b)=>a+b,0)/fpsHistory.length);
+    document.getElementById('hdFps').textContent=fps+' FPS';
+    lastFpsTs=ts;
+  }
+
+  simStep(dtReal);
+  robots.forEach(r=>updateRobotXY(r));
+  drawMap();
+  renderAll();
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  BOOT
+// ═══════════════════════════════════════════════════════════════
+window.addEventListener('resize',()=>{ resizeCanvas(); drawMap(); });
+resizeCanvas();
+initSim();
+loop(performance.now());
+</script>
+</body>
+</html>
